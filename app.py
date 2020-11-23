@@ -47,7 +47,7 @@ class Show(db.Model):
         "venue_name": self.venue.name,
         "artist_id": self.id,
         "artist_name": self.artist.name,
-        "artist_image_link": "https://images.unsplash.com/photo-1495223153807-b916f75de8c5?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=334&q=80",
+        "artist_image_link": self.artist_image_link,
         "start_time": format_datetime(str(self.start_time))
       }
       
@@ -57,6 +57,9 @@ class Venue(db.Model):
     __tablename__ = 'venue'
 
     id = db.Column(db.Integer, primary_key=True)
+    website = db.Column(db.String(120))
+    seeking_talent = db.Column(db.Boolean, default=False)
+    seeking_description = db.Column(db.String(120))
     name = db.Column(db.String)
     city = db.Column(db.String(120))
     state = db.Column(db.String(120))
@@ -87,6 +90,9 @@ class Artist(db.Model):
     genres = db.Column("genres", db.ARRAY(db.String()))
     image_link = db.Column(db.String(500))
     facebook_link = db.Column(db.String(120))
+    website = db.Column(db.String(120))
+    seeking_venue = db.Column(db.Boolean, default=False)
+    seeking_description = db.Column(db.String(120))
     shows = db.relationship(
       'Show',
       backref='artist',
@@ -146,7 +152,7 @@ def venues():
 @app.route('/venues/search', methods=['POST'])
 def search_venues():
   search_query = request.form.get('search_term', '')
-  result = Venue.query.filter(Artist.name.ilike(f'%{search_query}%'))
+  result = Venue.query.filter(Venue.name.ilike(f'%{search_query}%'))
   response={
     "count": result.count(),
     "data": result
@@ -159,7 +165,7 @@ def show_venue(venue_id):
 
   now = datetime.now().date()
   past_shows, upcoming_shows = [], []
-  for show in venue.shows:
+  for show in Show.query.join(Venue, Venue.id==Show.venue_id):
     if show.start_time < now:
       past_shows.append(show)
     else:
@@ -169,16 +175,15 @@ def show_venue(venue_id):
   data={
     "id": venue.id,
     "name": venue.name,
-    # "genres": ["Rock n Roll", "Jazz", "Classical", "Folk"],
-    "genres": venue.genres,
+    "genres": ''.join(venue.genres).lstrip('{').rstrip('}').split(','),
     "address": venue.address,
     "city": venue.city,
     "state": venue.state,
     "phone": venue.phone,
-    "website": "https://www.parksquarelivemusicandcoffee.com",
-    "facebook_link": "https://www.facebook.com/ParkSquareLiveMusicAndCoffee",
-    "seeking_talent": False,
-    "image_link": "https://images.unsplash.com/photo-1485686531765-ba63b07845a7?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=crop&w=747&q=80",
+    "website": venue.website,
+    "facebook_link": venue.facebook_link,
+    "seeking_talent": venue.seeking_talent,
+    "image_link": venue.image_link,
     "past_shows": [show.display_dict() for show in past_shows],
     "upcoming_shows": [show.display_dict() for show in upcoming_shows],
     "past_shows_count": len(past_shows),
@@ -199,10 +204,17 @@ def create_venue_submission():
 
   try:
     form = VenueForm()
-    new_venue = Venue(name=form.name.data, city=form.city.data, 
-                  state=form.state.data, address=form.address.data,
-                  phone=form.phone.data, image_link=form.image_link.data,
-                  genres=form.genres.data, facebook_link=form.facebook_link.data)
+    new_venue = Venue(name=form.name.data, 
+                  city=form.city.data, 
+                  state=form.state.data, 
+                  address=form.address.data,
+                  phone=form.phone.data, 
+                  image_link=form.image_link.data,
+                  genres=form.genres.data, 
+                  facebook_link=form.facebook_link.data,
+                  seeking_talent=form.seeking_venue.data=='Yes', 
+                  seeking_description=form.seeking_description.data,
+                  website = form.website.data)
 
     db.session.add(new_venue)
     db.session.commit()
@@ -260,9 +272,9 @@ def show_artist(artist_id):
 
   past_shows = []
   upcoming_shows = []
-  current_time = datetime.now().date()
+  now = datetime.now().date()
 
-  for show in artist.shows:
+  for show in Show.query.join(Artist, Artist.id==Show.artist_id):
     if show.start_time < now:
       past_shows.append(show)
     else:
@@ -271,7 +283,7 @@ def show_artist(artist_id):
   data={
     "id": artist.id,
     "name": artist.name,
-    "genres": artist.genres,
+    "genres": ''.join(artist.genres).lstrip('{').rstrip('}').split(','),
     "city": artist.city,
     "state": artist.state,
     "phone": artist.phone,
@@ -280,7 +292,10 @@ def show_artist(artist_id):
     "past_shows": [show.display_dict() for show in past_shows],
     "upcoming_shows": [show.display_dict() for show in upcoming_shows],
     "past_shows_count": len(past_shows),
-    "upcoming_shows_count": len(upcoming_shows)
+    "upcoming_shows_count": len(upcoming_shows),
+    "seeking_venue": artist.seeking_venue,
+    "seeking_description": artist.seeking_description,
+    "website": artist.website
   }
   return render_template('pages/show_artist.html', artist=data)
 
@@ -293,12 +308,15 @@ def edit_artist(artist_id):
   artist_data = {
     "id": artist.id,
     "name": artist.name,
-    "genres": artist.genres,
+    "genres": ''.join(artist.genres).lstrip('{').rstrip('}').split(','),
     "city": artist.city,
     "state": artist.state,
     "phone": artist.phone,
     "facebook_link": artist.facebook_link,
-    "image_link": artist.image_link
+    "image_link": artist.image_link,
+    "seeking_venue": artist.seeking_venue,
+    "seeking_description": artist.seeking_description,
+    "website": artist.website
     }
 
   return render_template('forms/edit_artist.html', form=form, artist=artist_data)
@@ -316,6 +334,9 @@ def edit_artist_submission(artist_id):
     artist.genres = form.genres.data
     artist.image_link = form.image_link.data
     artist.facebook_link = form.facebook_link.data
+    seeking_venue = form.seeking_venue.data == 'Yes'
+    seeking_description = form.seeking_description.data
+    website = form.website.data
     db.session.commit()
   except Exception as e:
     db.session.rolback()
@@ -331,15 +352,16 @@ def edit_venue(venue_id):
   venue_data={
     "id": venue.id,
     "name": venue.name,
-    "genres": venue.genres,
+    "genres": ''.join(venue.genres).lstrip('{').rstrip('}').split(','),
     "address": venue.address,
     "city": venue.city,
     "state": venue.state,
     "phone": venue.phone,
     "website": venue.website,
     "facebook_link": venue.facebook_link,
-    "seeking_talent": False,
-    "seeking_description": "",
+    "seeking_talent": venue.seeking_talent,
+    "seeking_description": venue.seeking_description,
+    "website": artist.website,
     "image_link": venue.image_link,
   }
   
@@ -361,7 +383,9 @@ def edit_venue_submission(venue_id):
     venue.facebook_link = form.facebook_link.data
     venue.website = form.website.data
     venue.image_link = form.image_link.data
-
+    seeking_talent = form.seeking_talent.data == 'Yes'
+    seeking_description = form.seeking_description.data
+    website = form.website.data
     db.session.commit()
   except Exception as e:
     db.session.rolback()
@@ -384,9 +408,16 @@ def create_artist_submission():
     [print (request.form[k] + " key " + k) for k in request.form]
     form = ArtistForm()
 
-    new_artist = Artist(name=form.name.data, city=form.city.data, state=form.city.data,
-                    phone=form.phone.data, genres=form.genres.data, 
-                    image_link=form.image_link.data, facebook_link=form.facebook_link.data)
+    new_artist = Artist(name=form.name.data, 
+                    city=form.city.data, 
+                    state=form.city.data,
+                    phone=form.phone.data, 
+                    genres=form.genres.data, 
+                    image_link=form.image_link.data, 
+                    facebook_link=form.facebook_link.data,
+                    seeking_venue=form.seeking_venue.data=='Yes', 
+                    seeking_description=form.seeking_description.data,
+                    website = form.website.data)
 
     db.session.add(new_artist)
     db.session.commit()
