@@ -47,7 +47,7 @@ class Show(db.Model):
         "venue_name": self.venue.name,
         "artist_id": self.id,
         "artist_name": self.artist.name,
-        "artist_image_link": self.artist_image_link,
+        "artist_image_link": self.artist.image_link,
         "start_time": format_datetime(str(self.start_time))
       }
       
@@ -212,7 +212,7 @@ def create_venue_submission():
                   image_link=form.image_link.data,
                   genres=form.genres.data, 
                   facebook_link=form.facebook_link.data,
-                  seeking_talent=form.seeking_venue.data=='Yes', 
+                  seeking_talent=form.seeking_talent.data=='Yes', 
                   seeking_description=form.seeking_description.data,
                   website = form.website.data)
 
